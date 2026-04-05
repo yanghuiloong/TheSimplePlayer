@@ -11,6 +11,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shell;
 using System.Windows.Threading;
 using System.Diagnostics;
 using Microsoft.Win32;
@@ -45,6 +46,21 @@ namespace SimplePlayer
         private const int APPCOMMAND_MEDIA_NEXTTRACK = 11;
         private const int APPCOMMAND_MEDIA_PREVIOUSTRACK = 12;
         private const int APPCOMMAND_MEDIA_STOP = 13;
+
+        // DWM Attributes for Dark Title Bar
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        private const int DWMWA_CAPTION_COLOR = 35;
+        private const int DWMWA_TEXT_COLOR = 36;
+        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+
+        // DWM_WINDOW_CORNER_PREFERENCE values
+        private const int DWMWCP_DEFAULT = 0;
+        private const int DWMWCP_DONOTROUND = 1;
+        private const int DWMWCP_ROUND = 2;
+        private const int DWMWCP_ROUNDSMALL = 3;
+
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
         // ======================== Constants ========================
 
@@ -87,13 +103,20 @@ namespace SimplePlayer
         // Handle for the WndProc hook
         private HwndSource? _hwndSource;
 
+        // Mini Mode State
+        private bool _isMiniMode = false;
+        private double _normalWidth = 560;
+        private double _normalHeight = 720;
+        private double _normalLeft;
+        private double _normalTop;
+
         // ======================== Constructor ========================
 
         public MainWindow()
         {
             InitializeComponent();
 
-            _player.Volume = 0.5;
+            _player.Volume = 0.25;
 
             _timer = new DispatcherTimer
             {
@@ -128,8 +151,23 @@ namespace SimplePlayer
         /// </summary>
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
         {
-            _hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            var helper = new WindowInteropHelper(this);
+            IntPtr hwnd = helper.Handle;
+
+            _hwndSource = HwndSource.FromHwnd(hwnd);
             _hwndSource?.AddHook(WndProc);
+
+            // Force dark title bar (Windows 10/11)
+            int dark = 1;
+            DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+
+            // Set exact background color for Windows 11 (#1E1E2E -> 0x002E1E1E)
+            int bgColor = 0x002E1E1E;
+            DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref bgColor, sizeof(int));
+
+            // Set title bar text color to white
+            int textColor = 0x00FFFFFF;
+            DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref textColor, sizeof(int));
         }
 
         /// <summary>
@@ -321,6 +359,7 @@ namespace SimplePlayer
                             _timer.Stop();
                             _isPlaying = false;
                             BtnPlayPause.Content = "▶";
+                            BtnPlayPauseMini.Content = "▶";
                         }
                         handled = true;
                         break;
@@ -413,6 +452,7 @@ namespace SimplePlayer
                 _timer.Stop();
                 _isPlaying = false;
                 BtnPlayPause.Content = "▶";
+                BtnPlayPauseMini.Content = "▶";
             }
             else
             {
@@ -426,6 +466,7 @@ namespace SimplePlayer
                     _timer.Start();
                     _isPlaying = true;
                     BtnPlayPause.Content = "⏸";
+                    BtnPlayPauseMini.Content = "⏸";
                 }
             }
         }
@@ -510,10 +551,14 @@ namespace SimplePlayer
 
             TxtCurrentTime.Text = FormatTime(position);
             TxtTotalTime.Text = FormatTime(duration);
+            TxtCurrentTimeMini.Text = FormatTime(position);
+            TxtTotalTimeMini.Text = FormatTime(duration);
 
             if (duration.TotalSeconds > 0)
             {
-                SliderProgress.Value = (position.TotalSeconds / duration.TotalSeconds) * 100.0;
+                double percent = (position.TotalSeconds / duration.TotalSeconds) * 100.0;
+                SliderProgress.Value = percent;
+                SliderProgressMini.Value = percent;
             }
 
             UpdateLyricsDisplay(position.TotalSeconds);
@@ -549,6 +594,7 @@ namespace SimplePlayer
             _timer.Stop();
             _isPlaying = false;
             BtnPlayPause.Content = "▶";
+            BtnPlayPauseMini.Content = "▶";
 
             string errorMsg = e.ErrorException?.Message ?? "Unknown error";
             string msgTemplate = GetLangString("Str_PlaybackErrorMsg");
@@ -589,18 +635,44 @@ namespace SimplePlayer
         /// </summary>
         private void SliderProgress_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            // Skip if user is dragging (handled by DragCompleted)
-            if (_isDraggingSlider)
-                return;
-
-            // Skip if no song is loaded
-            if (_currentIndex < 0 || !_player.NaturalDuration.HasTimeSpan)
-                return;
+            if (_isDraggingSlider || _currentIndex < 0 || !_player.NaturalDuration.HasTimeSpan) return;
 
             double totalSeconds = _player.NaturalDuration.TimeSpan.TotalSeconds;
             if (totalSeconds <= 0) return;
 
-            // Only seek if the difference is significant (avoids feedback loop with timer)
+            double targetSeconds = (e.NewValue / 100.0) * totalSeconds;
+            double currentSeconds = _player.Position.TotalSeconds;
+            if (Math.Abs(targetSeconds - currentSeconds) > 0.5)
+            {
+                _player.Position = TimeSpan.FromSeconds(targetSeconds);
+            }
+        }
+
+        private void SliderProgressMini_DragStarted(object sender, DragStartedEventArgs e)
+        {
+            _isDraggingSlider = true;
+        }
+
+        private void SliderProgressMini_DragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            _isDraggingSlider = false;
+
+            if (_currentIndex < 0 || !_player.NaturalDuration.HasTimeSpan) return;
+
+            double totalSeconds = _player.NaturalDuration.TimeSpan.TotalSeconds;
+            if (totalSeconds <= 0) return;
+
+            double targetSeconds = (SliderProgressMini.Value / 100.0) * totalSeconds;
+            _player.Position = TimeSpan.FromSeconds(targetSeconds);
+        }
+
+        private void SliderProgressMini_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isDraggingSlider || _currentIndex < 0 || !_player.NaturalDuration.HasTimeSpan) return;
+
+            double totalSeconds = _player.NaturalDuration.TimeSpan.TotalSeconds;
+            if (totalSeconds <= 0) return;
+
             double targetSeconds = (e.NewValue / 100.0) * totalSeconds;
             double currentSeconds = _player.Position.TotalSeconds;
             if (Math.Abs(targetSeconds - currentSeconds) > 0.5)
@@ -643,6 +715,12 @@ namespace SimplePlayer
                 });
             }
             HighlightCurrentTrack();
+
+            // Toggle Empty State visibility based on whether the main playlist is empty
+            if (EmptyStateOverlay != null)
+            {
+                EmptyStateOverlay.Visibility = _songPaths.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         // ======================== Add Music ========================
@@ -740,14 +818,26 @@ namespace SimplePlayer
             _searchFilter = string.Empty;
             SearchBox.Text = string.Empty;
             BtnPlayPause.Content = "▶";
+            BtnPlayPauseMini.Content = "▶";
+
+            if (EmptyStateOverlay != null)
+            {
+                EmptyStateOverlay.Visibility = Visibility.Visible;
+            }
 
             TxtCurrentTime.Text = "00:00";
             TxtTotalTime.Text = "00:00";
             SliderProgress.Value = 0;
+            TxtCurrentTimeMini.Text = "00:00";
+            TxtTotalTimeMini.Text = "00:00";
+            SliderProgressMini.Value = 0;
 
             TxtSongTitle.Text = GetLangString("Str_NoSongPlaying");
             TxtArtist.Text = "—";
             ImgCoverArt.Source = null;
+            TxtSongTitleMini.Text = GetLangString("Str_NoSongPlaying");
+            TxtArtistMini.Text = "—";
+            ImgCoverArtMini.Source = null;
             LyricsText.Text = "";
 
             Title = "Simple Player";
@@ -853,6 +943,7 @@ namespace SimplePlayer
 
             _isPlaying = true;
             BtnPlayPause.Content = "⏸";
+            BtnPlayPauseMini.Content = "⏸";
 
             HighlightCurrentTrack();
             _timer.Start();
@@ -915,21 +1006,6 @@ namespace SimplePlayer
 
         private static string ReadDisplayName(string filePath)
         {
-            try
-            {
-                using var tagFile = TagLib.File.Create(filePath);
-                string? title = tagFile.Tag.Title;
-                string? artist = tagFile.Tag.FirstPerformer;
-
-                if (!string.IsNullOrWhiteSpace(title))
-                {
-                    return string.IsNullOrWhiteSpace(artist)
-                        ? title
-                        : $"{title}  —  {artist}";
-                }
-            }
-            catch { /* Fall through */ }
-
             return Path.GetFileNameWithoutExtension(filePath);
         }
 
@@ -943,8 +1019,7 @@ namespace SimplePlayer
             {
                 using var tagFile = TagLib.File.Create(filePath);
 
-                if (!string.IsNullOrWhiteSpace(tagFile.Tag.Title))
-                    title = tagFile.Tag.Title;
+                // Use file name consistently, ignore tagFile.Tag.Title
 
                 if (!string.IsNullOrWhiteSpace(tagFile.Tag.FirstPerformer))
                     artist = tagFile.Tag.FirstPerformer;
@@ -966,6 +1041,23 @@ namespace SimplePlayer
             TxtSongTitle.Text = title;
             TxtArtist.Text = artist;
             ImgCoverArt.Source = coverImage;
+            TxtSongTitleMini.Text = title;
+            TxtArtistMini.Text = artist;
+            ImgCoverArtMini.Source = coverImage;
+
+            // Apply dynamic background cover brush if no image is present
+            if (coverImage == null)
+            {
+                var brush = GetHashPastelBrush(title);
+                CoverArtBorder.Background = brush;
+                CoverArtBorderMini.Background = brush;
+            }
+            else
+            {
+                var defaultBrush = (SolidColorBrush)FindResource("SurfaceLightBrush");
+                CoverArtBorder.Background = defaultBrush;
+                CoverArtBorderMini.Background = defaultBrush;
+            }
 
             Title = $"♫ {title} — Simple Player";
         }
@@ -1116,6 +1208,154 @@ namespace SimplePlayer
         {
             string newLang = _currentLang == "zh-CN" ? "en-US" : "zh-CN";
             ApplyLanguage(newLang);
+        }
+
+        // ======================== Mini Player & Dragging ========================
+
+        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_isMiniMode && e.ButtonState == MouseButtonState.Pressed)
+            {
+                this.DragMove();
+            }
+        }
+
+        private void BtnMiniMode_Click(object sender, RoutedEventArgs e)
+        {
+            _isMiniMode = true;
+
+            // Save normal dimensions and position
+            _normalWidth = this.Width;
+            _normalHeight = this.Height;
+            _normalLeft = this.Left;
+            _normalTop = this.Top;
+
+            NormalLayoutBorder.Visibility = Visibility.Collapsed;
+            MiniLayoutBorder.Visibility = Visibility.Visible;
+
+            // Disable resize for mini mode
+            var chrome = WindowChrome.GetWindowChrome(this);
+            if (chrome != null)
+            {
+                chrome.ResizeBorderThickness = new Thickness(0);
+            }
+
+            // Adjust window state
+            this.ResizeMode = ResizeMode.NoResize;
+            this.Topmost = true;
+
+            // Resize to compact dimensions
+            this.MinWidth = 350;
+            this.MinHeight = 120;
+            this.Width = 350;
+            this.Height = 120;
+        }
+
+        private void BtnRestoreMode_Click(object sender, RoutedEventArgs e)
+        {
+            _isMiniMode = false;
+            
+            NormalLayoutBorder.Visibility = Visibility.Visible;
+            MiniLayoutBorder.Visibility = Visibility.Collapsed;
+
+            // Re-enable resize for normal mode
+            var chrome = WindowChrome.GetWindowChrome(this);
+            if (chrome != null)
+            {
+                chrome.ResizeBorderThickness = new Thickness(6);
+            }
+
+            // Restore window state
+            this.ResizeMode = ResizeMode.CanResize;
+            this.Topmost = false;
+
+            // Restore original dimensions and position
+            this.MinWidth = 440;
+            this.MinHeight = 600;
+            this.Width = _normalWidth;
+            this.Height = _normalHeight;
+            this.Left = _normalLeft;
+            this.Top = _normalTop;
+        }
+
+        private void BtnPlayPauseMini_Click(object sender, RoutedEventArgs e) => TogglePlayPause();
+        private void BtnPrevMini_Click(object sender, RoutedEventArgs e) => BtnPrev_Click(sender, e);
+        private void BtnNextMini_Click(object sender, RoutedEventArgs e) => BtnNext_Click(sender, e);
+
+        // ======================== Custom Title Bar ========================
+
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2)
+            {
+                BtnMaximize_Click(sender, e);
+            }
+            else
+            {
+                this.DragMove();
+            }
+        }
+
+        private void BtnMinimize_Click(object sender, RoutedEventArgs e)
+        {
+            this.WindowState = WindowState.Minimized;
+        }
+
+        private void BtnMaximize_Click(object sender, RoutedEventArgs e)
+        {
+            if (this.WindowState == WindowState.Maximized)
+                this.WindowState = WindowState.Normal;
+            else
+                this.WindowState = WindowState.Maximized;
+        }
+
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
+        }
+
+        // ======================== Dynamic Cover Art Hash ========================
+
+        private LinearGradientBrush GetHashPastelBrush(string title)
+        {
+            int hash = 0;
+            foreach (char c in title)
+            {
+                hash = (hash * 31) + c;
+            }
+            
+            // Generate two complementary hues (pastels)
+            double hue1 = (Math.Abs(hash) % 360);
+            double hue2 = (hue1 + 40) % 360;
+
+            System.Windows.Media.Color c1 = HslToRgb(hue1, 0.6, 0.7);
+            System.Windows.Media.Color c2 = HslToRgb(hue2, 0.7, 0.8);
+
+            return new LinearGradientBrush(c1, c2, 45.0);
+        }
+
+        private System.Windows.Media.Color HslToRgb(double h, double s, double l)
+        {
+            double r = l, g = l, b = l;
+            if (s != 0)
+            {
+                double q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                double p = 2 * l - q;
+                r = HueToRgb(p, q, h / 360.0 + 1.0 / 3.0);
+                g = HueToRgb(p, q, h / 360.0);
+                b = HueToRgb(p, q, h / 360.0 - 1.0 / 3.0);
+            }
+            return System.Windows.Media.Color.FromRgb((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
+        }
+
+        private double HueToRgb(double p, double q, double t)
+        {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1.0 / 6.0) return p + (q - p) * 6 * t;
+            if (t < 1.0 / 2.0) return q;
+            if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6;
+            return p;
         }
     }
 }

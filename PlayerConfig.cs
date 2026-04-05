@@ -25,7 +25,7 @@ namespace SimplePlayer
         /// Volume level from 0.0 (mute) to 1.0 (max).
         /// </summary>
         [JsonPropertyName("volume")]
-        public double Volume { get; set; } = 0.5;
+        public double Volume { get; set; } = 0.25;
 
         /// <summary>
         /// UI language code: "zh-CN" or "en-US". Defaults to Chinese.

@@ -7,8 +7,18 @@
         Width="560" Height="720"
         MinWidth="440" MinHeight="600"
         WindowStartupLocation="CenterScreen"
-        Background="#1E1E2E"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        Background="Transparent"
+        AllowsTransparency="True"
+        WindowStyle="None"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" 
+                      ResizeBorderThickness="6"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <!-- ==================== Color Palette ==================== -->
@@ -85,7 +95,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="27"
+                                CornerRadius="50"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -161,6 +171,65 @@
             </Setter>
         </Style>
 
+
+
+        <!-- ==================== ScrollBar Style ==================== -->
+        <Style TargetType="{x:Type ScrollBar}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid x:Name="Bg" Background="{TemplateBinding Background}">
+                            <!-- Thin, semi-transparent track line -->
+                            <Border x:Name="TrackBackground" Width="4" HorizontalAlignment="Right" Margin="0,0,5,0" Background="Transparent" CornerRadius="2"/>
+                            
+                            <Track x:Name="PART_Track" IsDirectionReversed="true">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}" Visibility="Collapsed"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}" Visibility="Collapsed"/>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Cursor="Hand">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="{x:Type Thumb}">
+                                                <Border x:Name="ThumbBorder"
+                                                        Width="4" 
+                                                        HorizontalAlignment="Right"
+                                                        Margin="0,0,5,0"
+                                                        Background="{StaticResource BorderSubtleBrush}" 
+                                                        CornerRadius="2"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ThumbBorder" Property="Width" Value="8"/>
+                                                        <Setter TargetName="ThumbBorder" Property="Margin" Value="0,0,3,0"/>
+                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="{StaticResource TextSecondaryBrush}"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsDragging" Value="True">
+                                                        <Setter TargetName="ThumbBorder" Property="Width" Value="8"/>
+                                                        <Setter TargetName="ThumbBorder" Property="Margin" Value="0,0,3,0"/>
+                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <!-- Hide the scrollbar entirely if no scrolling is needed -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bg" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ==================== ListBox Style ==================== -->
         <Style x:Key="PlaylistStyle" TargetType="ListBox">
             <Setter Property="Background"    Value="{StaticResource SurfaceBrush}"/>
@@ -188,6 +257,7 @@
         </Style>
 
         <Style x:Key="PlaylistItemStyle" TargetType="ListBoxItem">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Padding"    Value="10,8"/>
             <Setter Property="Margin"     Value="2"/>
             <Setter Property="Cursor"     Value="Hand"/>
@@ -360,26 +430,64 @@
     </Window.Resources>
 
     <!-- ==================== Main Layout ==================== -->
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <!-- Row 0: Toolbar (Add / Clear / Search) -->
-            <RowDefinition Height="Auto"/>
-            <!-- Row 1: Playlist -->
-            <RowDefinition Height="*"/>
-            <!-- Row 2: Now Playing info (cover + title + artist) -->
-            <RowDefinition Height="Auto"/>
-            <!-- Row 3: Lyrics display -->
-            <RowDefinition Height="Auto"/>
-            <!-- Row 4: Progress bar row -->
-            <RowDefinition Height="Auto"/>
-            <!-- Row 5: Playback controls -->
-            <RowDefinition Height="Auto"/>
-            <!-- Row 6: Volume control -->
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Grid x:Name="RootLayoutGrid">
+        
+        <!-- ==================== NORMAL LAYOUT ==================== -->
+        <Border x:Name="NormalLayoutBorder" Background="#1E1E2E" CornerRadius="0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="32"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Custom Title Bar -->
+                <Grid x:Name="TitleBar" Grid.Row="0" Background="#1E1E2E" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Simple Player" 
+                               Foreground="{StaticResource TextSecondaryBrush}" 
+                               VerticalAlignment="Center" 
+                               Margin="12,0,0,0"
+                               FontSize="12"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button x:Name="BtnMinimize" Content="─" Width="46" Height="32" 
+                                Background="Transparent" Foreground="{StaticResource TextPrimaryBrush}"
+                                BorderThickness="0" FontSize="12" Cursor="Hand"
+                                Click="BtnMinimize_Click"/>
+                        <Button x:Name="BtnMaximize" Content="□" Width="46" Height="32"
+                                Background="Transparent" Foreground="{StaticResource TextPrimaryBrush}"
+                                BorderThickness="0" FontSize="12" Cursor="Hand"
+                                Click="BtnMaximize_Click"/>
+                        <Button x:Name="BtnClose" Content="✕" Width="46" Height="32"
+                                Background="Transparent" Foreground="{StaticResource TextPrimaryBrush}"
+                                BorderThickness="0" FontSize="12" Cursor="Hand"
+                                Click="BtnClose_Click"/>
+                    </StackPanel>
+                </Grid>
+                
+                <!-- Main Content -->
+                <Grid x:Name="NormalLayout" Grid.Row="1" Margin="16,0,16,16">
+                    <Grid.RowDefinitions>
+                    <!-- Row 0: Toolbar (Add / Clear / Search) -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Row 1: Playlist -->
+                    <RowDefinition Height="*"/>
+                    <!-- Row 2: Now Playing info (cover + title + artist) -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Row 3: Lyrics display -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Row 4: Progress bar row -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Row 5: Playback controls -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Row 6: Volume control -->
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
         <!-- ============ Row 0 : Toolbar ============ -->
-        <Grid Grid.Row="0" Margin="0,0,0,10">
+        <Grid x:Name="RowToolbar" Grid.Row="0" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
@@ -425,16 +533,28 @@
         </Grid>
 
         <!-- ============ Row 1 : Playlist ============ -->
-        <ListBox x:Name="PlaylistBox"
-                 Grid.Row="1"
-                 Style="{StaticResource PlaylistStyle}"
-                 ItemContainerStyle="{StaticResource PlaylistItemStyle}"
-                 Margin="0,0,0,10"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 MouseDoubleClick="PlaylistBox_MouseDoubleClick"
-                 AllowDrop="True"
-                 Drop="PlaylistBox_Drop"
-                 DragOver="PlaylistBox_DragOver"/>
+        <Grid x:Name="RowPlaylist" Grid.Row="1" Margin="0,0,0,10">
+            <ListBox x:Name="PlaylistBox"
+                     Style="{StaticResource PlaylistStyle}"
+                     ItemContainerStyle="{StaticResource PlaylistItemStyle}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     MouseDoubleClick="PlaylistBox_MouseDoubleClick"
+                     AllowDrop="True"
+                     Drop="PlaylistBox_Drop"
+                     DragOver="PlaylistBox_DragOver"/>
+
+            <StackPanel x:Name="EmptyStateOverlay"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        IsHitTestVisible="False"
+                        Visibility="Visible">
+                <TextBlock Text="🎵" FontSize="48" Foreground="{StaticResource BorderSubtleBrush}" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                <TextBlock Text="拖拽音乐文件或文件夹到这里开始播放" 
+                           Foreground="{StaticResource TextSecondaryBrush}" 
+                           FontSize="14"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
 
         <!-- ============ Row 2 : Now Playing Info ============ -->
         <Grid Grid.Row="2" Margin="0,0,0,8">
@@ -444,36 +564,47 @@
             </Grid.ColumnDefinitions>
 
             <!-- Album / Cover art -->
-            <Border Grid.Column="0"
+            <Border x:Name="CoverArtBorder" 
+                    Grid.Column="0"
                     Width="56" Height="56"
                     CornerRadius="6"
                     Background="{StaticResource SurfaceLightBrush}"
                     SnapsToDevicePixels="True"
                     Margin="0,0,10,0">
                 <Border.Clip>
-                    <RectangleGeometry RadiusX="6" RadiusY="6"
-                                       Rect="0,0,56,56"/>
+                    <RectangleGeometry RadiusX="6" RadiusY="6" Rect="0,0,56,56"/>
                 </Border.Clip>
-                <Image x:Name="ImgCoverArt"
-                       Width="56" Height="56"
-                       Stretch="UniformToFill"/>
+                <Grid>
+                    <TextBlock Text="🎵" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="26" Foreground="#44FFFFFF"/>
+                    <Image x:Name="ImgCoverArt" Width="56" Height="56" Stretch="UniformToFill"/>
+                </Grid>
             </Border>
 
             <!-- Song title + artist -->
-            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtSongTitle"
-                           Text="{DynamicResource Str_NoSongPlaying}"
-                           Foreground="{StaticResource TextPrimaryBrush}"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           TextTrimming="CharacterEllipsis"/>
-                <TextBlock x:Name="TxtArtist"
-                           Text="—"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           FontSize="12"
-                           Margin="0,2,0,0"
-                           TextTrimming="CharacterEllipsis"/>
-            </StackPanel>
+            <Grid Grid.Column="1" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <!-- Prevents content from overflowing the boundaries and maintains the layout structure -->
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock x:Name="TxtSongTitle"
+                               Text="{DynamicResource Str_NoSongPlaying}"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="380"
+                               HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="TxtArtist"
+                               Text="—"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="12"
+                               Margin="0,2,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="380"
+                               HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- ============ Row 3 : Lyrics Display ============ -->
@@ -525,49 +656,58 @@
         </Grid>
 
         <!-- ============ Row 5 : Playback Controls ============ -->
-        <StackPanel Grid.Row="5"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Center"
-                    Margin="0,0,0,8">
+        <Grid Grid.Row="5" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button x:Name="BtnPrev"
+                        Content="⏮"
+                        Focusable="False"
+                        Style="{StaticResource PlaybackButtonStyle}"
+                        VerticalAlignment="Center"
+                        Click="BtnPrev_Click"/>
 
-            <Button x:Name="BtnPrev"
-                    Content="⏮"
-                    Focusable="False"
-                    Style="{StaticResource PlaybackButtonStyle}"
-                    VerticalAlignment="Center"
-                    Click="BtnPrev_Click"/>
+                <Button x:Name="BtnPlayPause"
+                        Content="▶"
+                        Focusable="False"
+                        Style="{StaticResource PlayPauseButtonStyle}"
+                        Margin="12,0"
+                        VerticalAlignment="Center"
+                        Click="BtnPlayPause_Click"/>
 
-            <Button x:Name="BtnPlayPause"
-                    Content="▶"
-                    Focusable="False"
-                    Style="{StaticResource PlayPauseButtonStyle}"
-                    Margin="12,0"
-                    VerticalAlignment="Center"
-                    Click="BtnPlayPause_Click"/>
+                <Button x:Name="BtnNext"
+                        Content="⏭"
+                        Focusable="False"
+                        Style="{StaticResource PlaybackButtonStyle}"
+                        VerticalAlignment="Center"
+                        Click="BtnNext_Click"/>
 
-            <Button x:Name="BtnNext"
-                    Content="⏭"
-                    Focusable="False"
-                    Style="{StaticResource PlaybackButtonStyle}"
-                    VerticalAlignment="Center"
-                    Click="BtnNext_Click"/>
+                <Button x:Name="BtnMode"
+                        Content="{DynamicResource Str_ModeSequential}"
+                        Focusable="False"
+                        Style="{StaticResource ModeButtonStyle}"
+                        Margin="16,0,0,0"
+                        VerticalAlignment="Center"
+                        Click="BtnMode_Click"/>
+            </StackPanel>
 
-            <Button x:Name="BtnMode"
-                    Content="{DynamicResource Str_ModeSequential}"
+            <Button x:Name="BtnMiniMode"
+                    Content="🗗"
+                    ToolTip="切换迷你模式"
                     Focusable="False"
-                    Style="{StaticResource ModeButtonStyle}"
-                    Margin="16,0,0,0"
+                    Style="{StaticResource ToolbarButtonStyle}"
+                    HorizontalAlignment="Right"
                     VerticalAlignment="Center"
-                    Click="BtnMode_Click"/>
-        </StackPanel>
+                    Padding="8,4"
+                    Click="BtnMiniMode_Click"/>
+        </Grid>
 
         <!-- ============ Row 6 : Volume Control ============ -->
-        <StackPanel Grid.Row="6"
+        <StackPanel x:Name="RowVolumeControl"
+                    Grid.Row="6"
                     Orientation="Horizontal"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Margin="0,0,0,2">
-
+            
             <TextBlock Text="🔊"
                        Foreground="{StaticResource TextSecondaryBrush}"
                        FontSize="14"
@@ -576,11 +716,151 @@
 
             <Slider x:Name="SliderVolume"
                     Style="{StaticResource VolumeSliderStyle}"
-                    Value="0.5"
+                    Value="0.25"
                     IsMoveToPointEnabled="True"
                     Focusable="False"
                     VerticalAlignment="Center"
                     ValueChanged="SliderVolume_ValueChanged"/>
         </StackPanel>
+        </Grid> <!-- Close NormalLayout -->
+            </Grid>
+        </Border> <!-- Close NormalLayoutBorder -->
+
+        <!-- ==================== MINI LAYOUT ==================== -->
+        <Border x:Name="MiniLayoutBorder" 
+                Visibility="Collapsed" 
+                CornerRadius="16" 
+                Background="#1E1E2E"
+                Margin="0">
+            <Grid x:Name="MiniLayout" VerticalAlignment="Center" Margin="16,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Mini Cover Art -->
+            <Border x:Name="CoverArtBorderMini" 
+                    Grid.Column="0"
+                    Width="60" Height="60"
+                    CornerRadius="8"
+                    Background="{StaticResource SurfaceLightBrush}"
+                    SnapsToDevicePixels="True"
+                    Margin="0,0,12,0"
+                    VerticalAlignment="Center">
+                <Border.Clip>
+                    <RectangleGeometry RadiusX="8" RadiusY="8" Rect="0,0,60,60"/>
+                </Border.Clip>
+                <Grid>
+                    <TextBlock Text="🎵" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="28" Foreground="#44FFFFFF"/>
+                    <Image x:Name="ImgCoverArtMini" Width="60" Height="60" Stretch="UniformToFill"/>
+                </Grid>
+            </Border>
+
+            <!-- Mini Controls & Info -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                
+                <!-- Top: Text -->
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Grid.Column="0">
+                        <TextBlock x:Name="TxtSongTitleMini"
+                                   Text="{DynamicResource Str_NoSongPlaying}"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxWidth="230"
+                                   HorizontalAlignment="Left"/>
+                        <TextBlock x:Name="TxtArtistMini"
+                                   Text="—"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="12"
+                                   Margin="0,2,0,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxWidth="230"
+                                   HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    
+                    <Button x:Name="BtnRestoreMode"
+                            Grid.Column="1"
+                            Content="🗖"
+                            ToolTip="返回主界面"
+                            Focusable="False"
+                            Style="{StaticResource ToolbarButtonStyle}"
+                            VerticalAlignment="Top"
+                            Padding="8,4"
+                            Click="BtnRestoreMode_Click"/>
+                </Grid>
+
+                <!-- Middle: Seamless Thin Slider -->
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="TxtCurrentTimeMini"
+                               Grid.Column="0"
+                               Text="00:00"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0"/>
+
+                    <Slider x:Name="SliderProgressMini"
+                            Grid.Column="1"
+                            Style="{StaticResource ProgressSliderStyle}"
+                            IsMoveToPointEnabled="True"
+                            Focusable="False"
+                            VerticalAlignment="Center"
+                            Height="14"
+                            Thumb.DragStarted="SliderProgressMini_DragStarted"
+                            Thumb.DragCompleted="SliderProgressMini_DragCompleted"
+                            ValueChanged="SliderProgressMini_ValueChanged"/>
+
+                    <TextBlock x:Name="TxtTotalTimeMini"
+                               Grid.Column="2"
+                               Text="00:00"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="6,0,0,0"/>
+                </Grid>
+
+                <!-- Bottom: Mini Playback Controls -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnPrevMini"
+                            Content="⏮"
+                            FontSize="14"
+                            Width="32" Height="32"
+                            Focusable="False"
+                            Style="{StaticResource PlaybackButtonStyle}"
+                            Click="BtnPrevMini_Click"/>
+
+                    <Button x:Name="BtnPlayPauseMini"
+                            Content="▶"
+                            FontSize="16"
+                            Width="40" Height="40"
+                            Focusable="False"
+                            Style="{StaticResource PlayPauseButtonStyle}"
+                            Margin="16,0"
+                            Click="BtnPlayPauseMini_Click"/>
+
+                    <Button x:Name="BtnNextMini"
+                            Content="⏭"
+                            FontSize="14"
+                            Width="32" Height="32"
+                            Focusable="False"
+                            Style="{StaticResource PlaybackButtonStyle}"
+                            Click="BtnNextMini_Click"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+        </Border>
     </Grid>
 </Window>
